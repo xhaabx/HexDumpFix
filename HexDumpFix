@@ -1,0 +1,81 @@
+#!/bin/bash
+
+if [[ -z "$1" ]]; then 
+echo "Please provide the file to fix" 
+exit 0
+fi
+
+if [ -d HexTMP ]; then
+rm -r HexTMP
+fi
+
+mkdir HexTMP
+
+cp $1 HexTMP/test 
+cd HexTMP
+csplit test '/\*/' '{*}'
+rm test
+
+sed -i '1i *' xx00
+sed -i '1d' xx*
+
+cd ..
+
+cp $1 test2fixed
+
+TotalNumber=`grep '*' $1 | wc -l`
+
+clear
+
+for i in `seq 1 $TotalNumber`
+do
+
+#echo "Continue next file...press enter"
+#read -r DumbValue
+
+echo -n -e "\033[1k\rCompletando o arquivo $i de $TotalNumber"
+
+seq1=`cat test2fixed | grep '*' -B1 | head -1 | grep -v '*' | cut -d ' ' -f 2,3,4,5,6,7,8,9`
+
+hex1=`cat test2fixed | grep '*' -B1 | head -1 | grep -v '*' | cut -d ' ' -f 1 | sed 's/.$//'`
+hex2=`cat test2fixed | grep '*' -A1 | head -2 | grep -v '*' | cut -d ' ' -f 1 | sed 's/.$//'`
+hex1m=`echo  ${hex1^^}`
+hex2m=`echo  ${hex2^^}`
+
+dec1=`echo "obase=10; ibase=16; $hex1m" | bc`
+dec2=`echo "obase=10; ibase=16; $hex2m" | bc`
+final=`echo "$((dec2-1))"`
+
+#echo "seq1=$seq1"
+#echo "hex1=$hex1"
+#echo "hex2=$hex2"
+#echo "dec1=$dec1"
+#echo "dec2=$dec2"
+#echo "dec2final=$final"
+
+actualnumber=`echo "$((i-1))"`
+actualnumber1=`printf "%02d" $actualnumber`
+
+cat HexTMP/xx$actualnumber1 >> HexTMP/fixedfile.hexdumpfull
+
+seq $dec1 $final | while read n; do printf "%06x0 $seq1\n" $n; done >> HexTMP/fixedfile.hexdumpfull
+
+linedel=`grep -n '*' test2fixed | cut -d ':' -f 1 | head -1`
+#echo "linedel=$linedel"
+sed -i -e "1,$linedel d" test2fixed
+
+done
+
+rm test2fixed
+
+echo " "
+
+echo "Converting the file to the right format..."
+sed -E 's/ /: /;s/ (..)(..)/ \2\1/g' HexTMP/fixedfile.hexdumpfull > HexTMP/format.xxd
+
+echo "Creating the .dd file ..."
+xxd -r HexTMP/format.xxd > FullImage.dd
+
+echo "The file was created and the hash is:"
+md5sum FullImage.dd
+
